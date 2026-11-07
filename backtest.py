@@ -40,8 +40,9 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
         realized = value_now - float(prices.iloc[i + days] @ shares)
         if not np.isfinite(realized):
             raise ValueError(f"Realized loss at {prices.index[i].date()} is not finite")
-        row = {"date": prices.index[i], "end": prices.index[i + days],
-               "value": value_now, "loss": realized}
+        # days and window travel with each row so charts never have to guess the settings.
+        row = {"date": prices.index[i], "end": prices.index[i + days], "days": days,
+               "window": window, "value": value_now, "loss": realized}
         for level in levels:
             var, _ = var_es(simulated, level)
             row[f"var_{level:.0%}"] = var

@@ -33,14 +33,37 @@ STYLE = {
 }
 
 
-def backtest_chart(results: pd.DataFrame, path: Path, days: int = 21) -> Path:
+def backtest_settings(results: pd.DataFrame) -> tuple[int, int]:
+    """Horizon and calibration window recorded by backtest.py, never taken from chart arguments."""
+    missing = {"days", "window"}.difference(results.columns)
+    if missing:
+        raise ValueError(f"Backtest results lack {', '.join(sorted(missing))}; rerun backtest.py")
+    settings = []
+    for column in ("days", "window"):
+        values = results[column].unique()
+        if len(values) != 1:
+            raise ValueError(f"Backtest results mix several {column} settings: {sorted(values)}")
+        settings.append(int(values[0]))
+    return settings[0], settings[1]
+
+
+def backtest_labels(results: pd.DataFrame) -> dict[str, str]:
+    days, window = backtest_settings(results)
+    return {"title": f"Rolling {days}-day VaR vs. realized loss",
+            "subtitle": f"Each date: model fit only on the last {window} daily returns up to that "
+                        f"date; loss measured over the next {days} trading days",
+            "loss": f"Realized {days}-day loss"}
+
+
+def backtest_chart(results: pd.DataFrame, path: Path) -> Path:
     # Everything as a share of the portfolio value at the forecast date, so the scale is comparable
     # across years even though fixed shares make the dollar value drift.
+    labels = backtest_labels(results)
     loss = results["loss"] / results["value"]
     with plt.rc_context(STYLE):
         fig, ax = plt.subplots(figsize=(11, 5))
         ax.axhline(0, color=INK_2, linewidth=0.8)
-        ax.plot(loss.index, loss, color=INK_2, linewidth=1, label=f"Realized {days}-day loss")
+        ax.plot(loss.index, loss, color=INK_2, linewidth=1, label=labels["loss"])
         for level, color in (("95%", VAR_95), ("99%", VAR_99)):
             var = results[f"var_{level}"] / results["value"]
             breach = results[f"breach_{level}"].astype(bool)
@@ -51,9 +74,8 @@ def backtest_chart(results: pd.DataFrame, path: Path, days: int = 21) -> Path:
                    edgecolors=SURFACE, linewidths=1, label="Loss above 95% VaR")
         ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
         ax.set_ylabel("Share of portfolio value (positive = loss)")
-        ax.set_title(f"Rolling {days}-day VaR vs. realized loss", pad=24)
-        ax.text(0, 1.02, "Each date: model fit on the prior 252 days only; loss measured over the "
-                f"next {days} days", transform=ax.transAxes, color=INK_2, fontsize=9, va="bottom")
+        ax.set_title(labels["title"], pad=24)
+        ax.text(0, 1.02, labels["subtitle"], transform=ax.transAxes, color=INK_2, fontsize=9, va="bottom")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=2, fontsize=9)
         fig.tight_layout()
         fig.savefig(path, dpi=150)
@@ -161,7 +183,10 @@ def main():
                correlation_chart(returns, args.out / "correlation.png")]
     if args.backtest.exists():
         results = pd.read_csv(args.backtest, index_col="date", parse_dates=["date", "end"])
-        written.append(backtest_chart(results, args.out / "backtest.png", args.days))
+        try:
+            written.append(backtest_chart(results, args.out / "backtest.png"))
+        except ValueError as error:
+            print(f"Skipped backtest chart: {error}")
     else:
         print(f"Skipped backtest chart: {args.backtest} not found; run backtest.py first")
     for path in written:
