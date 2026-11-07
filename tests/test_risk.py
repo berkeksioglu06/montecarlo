@@ -27,6 +27,15 @@ class RiskTests(unittest.TestCase):
         self.assertEqual(es, 98.0)
         var, es = var_es(np.full(100, 7.0), 0.99)
         self.assertEqual((var, es), (7.0, 7.0))  # ES equals VaR when the tail is flat
+        for level in (0.0, 1.0, 95):
+            with self.assertRaisesRegex(ValueError, "between 0 and 1"):
+                var_es(loss, level)
+
+    def test_simulation_rejects_empty_horizon(self):
+        returns = random_returns(symbols=("A",))
+        for paths, days in ((10, 0), (0, 21)):
+            with self.assertRaisesRegex(ValueError, "positive"):
+                simulate(returns, pd.Series({"A": 1.0}), pd.Series({"A": 1.0}), paths, days)
 
     def test_max_drawdown_counts_from_running_peak(self):
         values = np.array([[100.0, 120.0, 90.0, 130.0], [100.0, 90.0, 95.0, 80.0]])

@@ -21,6 +21,10 @@ def losses(values: np.ndarray, day: int = -1) -> np.ndarray:
 def var_es(loss: np.ndarray, level: float) -> tuple[float, float]:
     # Empirical tail: the worst k = ceil(N * (1 - level)) outcomes.
     # VaR is the mildest loss in that tail, ES is the tail mean, so ES >= VaR by construction.
+    if not 0 < level < 1:
+        raise ValueError("Confidence level must be between 0 and 1")
+    if len(loss) == 0:
+        raise ValueError("No losses to measure")
     k = int(np.ceil(round(len(loss) * (1 - level), 9)))
     tail = np.sort(loss)[-k:]
     return float(tail[0]), float(tail.mean())

@@ -95,6 +95,8 @@ def align_positions(symbols: pd.Index, start: pd.Series,
 
 def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths: int = 10_000,
              n_days: int = 21, seed: int = 0, drift: str = "zero") -> np.ndarray:
+    if n_paths < 1 or n_days < 1:
+        raise ValueError("Paths and days must be positive")
     start, shares = align_positions(returns.columns, start, shares)
     mean, cov = parameters(returns, drift)
     shocks = correlated_shocks(cov, n_paths, n_days, np.random.default_rng(seed))
