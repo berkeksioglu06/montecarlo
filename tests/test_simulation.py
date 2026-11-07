@@ -1,13 +1,17 @@
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-import tempfile
-from pathlib import Path
-
 from simulation import (correlated_shocks, load_portfolio, parameters, portfolio_values,
-                        price_paths)
+                        price_paths, simulate, start_prices)
+
+
+def random_returns(n=100, symbols=("A", "B")):
+    rng = np.random.default_rng(7)
+    return pd.DataFrame(rng.normal(0.001, 0.02, (n, len(symbols))), columns=list(symbols))
 
 
 class SimulationTests(unittest.TestCase):
@@ -16,12 +20,23 @@ class SimulationTests(unittest.TestCase):
         shocks = correlated_shocks(cov, 200_000, 1, np.random.default_rng(0)).reshape(-1, 2)
         np.testing.assert_allclose(np.cov(shocks.T), cov, rtol=0.02)
 
-    def test_zero_mean_is_default(self):
-        returns = pd.DataFrame({"A": [0.01, 0.03], "B": [-0.02, 0.0]})
+    def test_zero_log_drift_is_default(self):
+        returns = random_returns()
         mean, cov = parameters(returns)
         self.assertTrue((mean == 0).all())
-        np.testing.assert_allclose(parameters(returns, zero_mean=False)[0], [0.02, -0.01])
+        np.testing.assert_allclose(parameters(returns, "historical")[0], returns.mean())
         np.testing.assert_allclose(cov, returns.cov())
+        with self.assertRaisesRegex(ValueError, "Unknown drift"):
+            parameters(returns, "mean")
+
+    def test_insufficient_history_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "at least"):
+            parameters(random_returns(n=1))
+
+    def test_singular_covariance_is_rejected(self):
+        cov = pd.DataFrame([[1e-4, 1e-4], [1e-4, 1e-4]])
+        with self.assertRaisesRegex(ValueError, "positive definite"):
+            correlated_shocks(cov, 1, 1, np.random.default_rng(0))
 
     def test_same_seed_same_paths(self):
         cov = pd.DataFrame(np.eye(3) * 1e-4)
@@ -41,18 +56,27 @@ class SimulationTests(unittest.TestCase):
         values = portfolio_values(paths, pd.Series([2.0, 5.0]))
         np.testing.assert_allclose(values, [[250, 320]])
 
-    def test_portfolio_aligns_to_price_columns(self):
+    def test_simulate_aligns_by_symbol_not_position(self):
+        returns = random_returns()
+        start = pd.Series({"B": 10.0, "A": 100.0})
+        shares = pd.Series({"B": 5.0, "A": 2.0})
+        values = simulate(returns, start, shares, n_paths=5, n_days=3)
+        self.assertAlmostEqual(values[0, 0], 250.0)
+        np.testing.assert_allclose(values, simulate(returns, start[["A", "B"]],
+                                                    shares[["A", "B"]], n_paths=5, n_days=3))
+        with self.assertRaisesRegex(ValueError, "ZZZ"):
+            simulate(returns, start, pd.Series({"ZZZ": 1.0}))
+
+    def test_portfolio_prices_override_last_close(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "portfolio.csv"
-            path.write_text("symbol,shares\nB,5\nA,2\n")
-            shares = load_portfolio(path, pd.Index(["A", "B", "C"]))
-            self.assertEqual(shares.tolist(), [2.0, 5.0, 0.0])
-            path.write_text("symbol,shares\nA,2\nZZZ,1\n")
-            with self.assertRaisesRegex(ValueError, "ZZZ"):
-                load_portfolio(path, pd.Index(["A"]))
+            path.write_text("symbol,shares,price\nA,2,120\nB,5,\n")
+            portfolio = load_portfolio(path)
+            start = start_prices(pd.Series({"A": 100.0, "B": 10.0}), portfolio)
+            self.assertEqual(start.to_dict(), {"A": 120.0, "B": 10.0})
             path.write_text("symbol,shares\nA,-1\n")
             with self.assertRaisesRegex(ValueError, "positive"):
-                load_portfolio(path, pd.Index(["A"]))
+                load_portfolio(path)
 
 
 if __name__ == "__main__":
