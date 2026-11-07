@@ -26,7 +26,7 @@ class ReturnsTests(unittest.TestCase):
     def test_summary_annualizes_mean_and_vol(self):
         returns = pd.DataFrame({"AAA": [0.01, -0.01] * 50})
         row = summary(returns).loc["AAA"]
-        self.assertAlmostEqual(row["ann_mean"], 0.0)
+        self.assertAlmostEqual(row["ann_log_mean"], 0.0)
         self.assertAlmostEqual(row["ann_vol"], returns["AAA"].std() * np.sqrt(252))
 
     def test_load_rejects_non_positive_prices(self):
@@ -34,6 +34,20 @@ class ReturnsTests(unittest.TestCase):
             prices([10, 0, 11]).to_csv(Path(tmp) / "prices.csv")
             with self.assertRaisesRegex(ValueError, "positive"):
                 load_prices(Path(tmp))
+
+    def test_load_rejects_infinite_prices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prices([10, np.inf, 11]).to_csv(Path(tmp) / "prices.csv")
+            with self.assertRaisesRegex(ValueError, "finite"):
+                load_prices(Path(tmp))
+
+    def test_load_rejects_unordered_or_duplicate_dates(self):
+        series = prices([10, 11, 12])
+        for bad in (series.iloc[::-1], pd.concat([series, series.iloc[[-1]]])):
+            with tempfile.TemporaryDirectory() as tmp:
+                bad.to_csv(Path(tmp) / "prices.csv")
+                with self.assertRaisesRegex(ValueError, "unique and increasing"):
+                    load_prices(Path(tmp))
 
     def test_latest_snapshot_skips_failed_runs(self):
         with tempfile.TemporaryDirectory() as tmp:

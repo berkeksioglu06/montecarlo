@@ -28,8 +28,11 @@ def load_prices(snapshot: Path, start: str | None = None) -> pd.DataFrame:
         prices = prices.loc[pd.Timestamp(start):]
     if len(prices) < 2:
         raise ValueError("Need at least two price rows")
-    if prices.isna().any().any() or (prices <= 0).any().any():
-        raise ValueError("Prices must be complete and positive")
+    if not prices.index.is_unique or not prices.index.is_monotonic_increasing:
+        raise ValueError("Dates must be unique and increasing")
+    values = prices.to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (values <= 0).any():
+        raise ValueError("Prices must be finite and positive")
     return prices
 
 
@@ -40,7 +43,8 @@ def log_returns(prices: pd.DataFrame) -> pd.DataFrame:
 
 def summary(returns: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({
-        "ann_mean": returns.mean() * TRADING_DAYS,
+        # Annualized mean log return: not CAGR, nor the expected simple return.
+        "ann_log_mean": returns.mean() * TRADING_DAYS,
         "ann_vol": returns.std() * np.sqrt(TRADING_DAYS),
         "worst_day": np.expm1(returns.min()),
         "best_day": np.expm1(returns.max()),
