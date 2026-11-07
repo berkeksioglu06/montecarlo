@@ -44,8 +44,9 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
         row = {"date": prices.index[i], "end": prices.index[i + days], "days": days,
                "window": window, "value": value_now, "loss": realized}
         for level in levels:
-            var, _ = var_es(simulated, level)
+            var, es = var_es(simulated, level)
             row[f"var_{level:.0%}"] = var
+            row[f"es_{level:.0%}"] = es  # the model's own forecast of the average loss in a breach
             row[f"breach_{level:.0%}"] = realized > var
         rows.append(row)
     if not rows:
@@ -91,6 +92,68 @@ def summarize(results: pd.DataFrame, levels, days: int, step: int) -> pd.DataFra
     return pd.DataFrame(rows).set_index("level")
 
 
+def breach_episodes(results: pd.DataFrame, level: float = 0.95) -> pd.DataFrame:
+    """Group breaches into episodes: runs of breaching forecasts whose loss windows overlap.
+
+    Overlapping daily forecasts share most of their horizon, so one bad stretch shows up as many
+    breaches. An episode ends when the next breach starts after every earlier window has ended.
+    Losses, VaR and ES are shares of the portfolio value at each forecast date.
+    """
+    var, es, breach = f"var_{level:.0%}", f"es_{level:.0%}", f"breach_{level:.0%}"
+    hits = results[results[breach].astype(bool)]
+    if hits.empty:
+        return pd.DataFrame(columns=["first", "last", "through", "breaches", "worst", "loss",
+                                     "var", "es", "excess", "loss_to_var"])
+    hits = hits.assign(loss_pct=hits["loss"] / hits["value"], var_pct=hits[var] / hits["value"],
+                       es_pct=hits[es] / hits["value"])
+    ends = pd.to_datetime(hits["end"])
+    # A window starting on the day an earlier one ends shares no returns with it: new episode.
+    episode = (hits.index >= ends.cummax().shift()).cumsum()
+    rows = []
+    for _, group in hits.groupby(np.asarray(episode)):
+        worst = group["loss_pct"].idxmax()
+        rows.append({"first": group.index[0], "last": group.index[-1],
+                     "through": pd.to_datetime(group["end"]).max(), "breaches": len(group),
+                     "worst": worst, "loss": group.at[worst, "loss_pct"],
+                     "var": group.at[worst, "var_pct"], "es": group.at[worst, "es_pct"],
+                     "excess": group.at[worst, "loss_pct"] - group.at[worst, "var_pct"],
+                     "loss_to_var": group.at[worst, "loss_pct"] / group.at[worst, "var_pct"]})
+    return pd.DataFrame(rows)
+
+
+def exceedance_summary(results: pd.DataFrame, level: float = 0.95) -> dict[str, float]:
+    """How far realized losses went past VaR, and whether the model's ES anticipated it."""
+    var, es, breach = f"var_{level:.0%}", f"es_{level:.0%}", f"breach_{level:.0%}"
+    hits = results[results[breach].astype(bool)]
+    if hits.empty:
+        return {"breaches": 0}
+    loss, value = hits["loss"], hits["value"]
+    return {"breaches": len(hits), "episodes": len(breach_episodes(results, level)),
+            "mean_excess": ((loss - hits[var]) / value).mean(),
+            "max_excess": ((loss - hits[var]) / value).max(),
+            "mean_loss_to_var": (loss / hits[var]).mean(),
+            "mean_loss": (loss / value).mean(), "mean_es": (hits[es] / value).mean()}
+
+
+def print_breaches(results: pd.DataFrame, level: float = 0.95):
+    summary = exceedance_summary(results, level)
+    print(f"\n{level:.0%} VaR breaches: {summary['breaches']} of {len(results)} forecasts", end="")
+    if not summary["breaches"]:
+        print()
+        return
+    print(f", in {summary['episodes']} episodes of overlapping windows")
+    print(f"  Past VaR by {summary['mean_excess']:.1%} of value on average "
+          f"(worst {summary['max_excess']:.1%}); loss / VaR averages {summary['mean_loss_to_var']:.2f}")
+    print(f"  Mean loss in a breach {summary['mean_loss']:.1%} vs. the model's ES "
+          f"{summary['mean_es']:.1%} on those same dates")
+    print(f"\n  {'first':<12}{'last':<12}{'window ends':<13}{'n':>3}  {'worst start':<13}"
+          f"{'loss':>7}{'VaR':>7}{'ES':>7}{'excess':>8}{'loss/VaR':>9}")
+    for row in breach_episodes(results, level).itertuples():
+        print(f"  {row.first.date()!s:<12}{row.last.date()!s:<12}{row.through.date()!s:<13}"
+              f"{row.breaches:>3}  {row.worst.date()!s:<13}{row.loss:>7.1%}{row.var:>7.1%}"
+              f"{row.es:>7.1%}{row.excess:>8.1%}{row.loss_to_var:>9.2f}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, help="Snapshot folder; defaults to the latest READY one")
@@ -130,6 +193,7 @@ def main():
               f"{row.kupiec_lr:<11.2f}{row.p_value:.3f}")
     print("\nOverlapping windows share days, so their breaches cluster: use the rate as a description,"
           "\nand the non-overlapping column for the test. A low p-value rejects the breach rate.")
+    print_breaches(results, 0.95)
     print(f"Saved per-date results to {args.out}")
 
 

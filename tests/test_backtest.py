@@ -3,7 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from backtest import backtest, kupiec, non_overlapping, summarize
+from backtest import (backtest, breach_episodes, exceedance_summary, kupiec, non_overlapping,
+                      summarize)
 
 
 def gbm_prices(n=600, vols=(0.02, 0.03), seed=5):
@@ -70,6 +71,42 @@ class BacktestTests(unittest.TestCase):
             backtest(prices, SHARES, days=21, window=60)
         with self.assertRaisesRegex(ValueError, "no positions"):
             backtest(prices, pd.Series(dtype=float), days=5, window=60)
+
+
+    def test_es_is_recorded_and_not_below_var(self):
+        results = backtest(gbm_prices(n=120), SHARES, days=5, window=60, n_paths=500, step=5)
+        for level in ("95%", "99%"):
+            self.assertTrue((results[f"es_{level}"] >= results[f"var_{level}"]).all())
+
+    def test_breach_episodes_merge_overlapping_windows_only(self):
+        dates = pd.bdate_range("2024-01-01", periods=30)
+        results = pd.DataFrame({"end": dates.shift(5), "value": 100.0, "loss": 1.0,
+                                "var_95%": 10.0, "es_95%": 12.0, "breach_95%": False}, index=dates)
+        # Breaches on days 0-2 overlap; day 5 starts exactly where day 0 ends but day 2's window
+        # runs to day 7, so it still joins; day 20 is far away.
+        for day, loss in ((0, 11.0), (1, 15.0), (2, 12.0), (5, 13.0), (20, 30.0)):
+            results.iloc[day, results.columns.get_loc("loss")] = loss
+            results.iloc[day, results.columns.get_loc("breach_95%")] = True
+        episodes = breach_episodes(results)
+        self.assertEqual(episodes["breaches"].tolist(), [4, 1])
+        self.assertEqual(episodes.loc[0, "worst"], dates[1])
+        self.assertAlmostEqual(episodes.loc[0, "excess"], 0.05)
+        self.assertAlmostEqual(episodes.loc[1, "loss_to_var"], 3.0)
+        # A breach starting on the day all earlier windows end shares no returns: new episode.
+        results.iloc[7, results.columns.get_loc("breach_95%")] = True
+        results.iloc[7, results.columns.get_loc("loss")] = 11.0
+        results.iloc[5, results.columns.get_loc("breach_95%")] = False
+        self.assertEqual(breach_episodes(results)["breaches"].tolist(), [3, 1, 1])
+        summary = exceedance_summary(results)
+        self.assertEqual((summary["breaches"], summary["episodes"]), (5, 3))
+        self.assertAlmostEqual(summary["mean_es"], 0.12)
+
+    def test_no_breaches_gives_empty_episodes(self):
+        dates = pd.bdate_range("2024-01-01", periods=3)
+        results = pd.DataFrame({"end": dates.shift(5), "value": 1.0, "loss": 0.0, "var_95%": 1.0,
+                                "es_95%": 1.0, "breach_95%": False}, index=dates)
+        self.assertTrue(breach_episodes(results).empty)
+        self.assertEqual(exceedance_summary(results), {"breaches": 0})
 
 
 if __name__ == "__main__":
