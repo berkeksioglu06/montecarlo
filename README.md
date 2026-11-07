@@ -1,6 +1,6 @@
 # montecarlo
 
-Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, and Monte Carlo risk metrics. Backtesting is next.
+Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, Monte Carlo risk metrics and a rolling VaR backtest. Charts are next.
 
 ## Setup and download
 
@@ -51,10 +51,12 @@ Copy `portfolio.example.csv` to `portfolio.csv` (ignored by Git) and fill in sha
 .venv\Scripts\python returns.py      # volatility, tails, correlation
 .venv\Scripts\python simulation.py   # distribution of portfolio value after 21 days
 .venv\Scripts\python risk.py         # VaR, ES, drawdown, variance shares
+.venv\Scripts\python backtest.py     # rolling 21-day VaR vs realized loss (~1 min)
 ```
 
 - `returns.py`: daily log returns from the latest READY snapshot's adjusted closes.
 - `simulation.py`: Cholesky-correlated normal log returns; prices compound as GBM with fixed shares. `--drift zero` (default) sets the mean log return to zero, which is not a zero expected return; `--drift historical` uses the sample mean.
 - `risk.py`: losses are `L = V0 - VT` (positive is a loss). VaR is the mildest loss in the worst `ceil(N(1 - level))` outcomes and ES is their mean. Parametric VaR is a delta-normal approximation, not an exact check; the exact check is the single-stock GBM test. Variance shares split daily portfolio variance, not the 21-day VaR.
+- `backtest.py`: at each date t the model is calibrated on the last 252 returns ending at t and starts from the close at t; nothing after t is used. A breach is a realized loss `V_t - V_{t+21}` above that VaR, with the same fixed shares. Daily forecasts overlap and their breaches cluster, so the Kupiec test uses only non-overlapping 21-day windows (about 48 here, which gives the test little power, especially at 99%). Per-date results go to `reports/backtest.csv`. Historical adjusted closes are the start prices; the portfolio's price column is ignored. The eight symbols were chosen today, so the history is not free of selection bias.
 
 Known limitation: normal shocks understate these stocks' fat tails (historical excess kurtosis 3 to 15).

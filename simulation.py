@@ -63,6 +63,8 @@ def load_portfolio(path: Path) -> pd.DataFrame:
         raise ValueError("Portfolio needs symbol and shares columns")
     if table["symbol"].duplicated().any():
         raise ValueError("Duplicate symbols in portfolio")
+    if table.empty:
+        raise ValueError("Portfolio has no positions")
     table = table.set_index("symbol")
     for column in table.columns.intersection(["shares", "price"]):
         values = table[column].dropna() if column == "price" else table[column]
@@ -86,10 +88,16 @@ def align_positions(symbols: pd.Index, start: pd.Series,
     unknown = shares.index.difference(symbols)
     if len(unknown):
         raise ValueError(f"No price history for: {', '.join(unknown)}")
-    shares = shares.reindex(symbols, fill_value=0.0)
-    start = start.reindex(symbols)
+    shares = shares.reindex(symbols, fill_value=0.0).astype(float)
+    if not np.isfinite(shares).all():
+        raise ValueError("Shares must be finite")
+    if not (shares != 0).any():
+        raise ValueError("Portfolio has no positions")
+    start = start.reindex(symbols).astype(float)
     if start.isna().any():
         raise ValueError(f"Missing start price for: {', '.join(start.index[start.isna()])}")
+    if not np.isfinite(start).all() or (start <= 0).any():
+        raise ValueError("Start prices must be finite and positive")
     return start, shares
 
 

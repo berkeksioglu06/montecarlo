@@ -23,8 +23,12 @@ def var_es(loss: np.ndarray, level: float) -> tuple[float, float]:
     # VaR is the mildest loss in that tail, ES is the tail mean, so ES >= VaR by construction.
     if not 0 < level < 1:
         raise ValueError("Confidence level must be between 0 and 1")
+    loss = np.asarray(loss, dtype=float)
     if len(loss) == 0:
         raise ValueError("No losses to measure")
+    if not np.isfinite(loss).all():
+        # NaN would sort to the end and silently become the "worst" loss; inf would poison ES.
+        raise ValueError(f"{np.count_nonzero(~np.isfinite(loss))} losses are NaN or infinite")
     k = int(np.ceil(round(len(loss) * (1 - level), 9)))
     tail = np.sort(loss)[-k:]
     return float(tail[0]), float(tail.mean())

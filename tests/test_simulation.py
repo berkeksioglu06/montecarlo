@@ -77,6 +77,9 @@ class SimulationTests(unittest.TestCase):
             path.write_text("symbol,shares\nA,-1\n")
             with self.assertRaisesRegex(ValueError, "positive"):
                 load_portfolio(path)
+            path.write_text("symbol,shares,price\n")
+            with self.assertRaisesRegex(ValueError, "no positions"):
+                load_portfolio(path)
 
 
 if __name__ == "__main__":

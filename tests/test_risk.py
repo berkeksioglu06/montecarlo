@@ -31,6 +31,27 @@ class RiskTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "between 0 and 1"):
                 var_es(loss, level)
 
+    def test_non_finite_losses_are_rejected(self):
+        for bad in (np.nan, np.inf, -np.inf):
+            loss = np.arange(1.0, 101.0)
+            loss[10] = bad
+            with self.assertRaisesRegex(ValueError, "NaN or infinite"):
+                var_es(loss, 0.95)
+        with self.assertRaisesRegex(ValueError, "No losses"):
+            var_es(np.array([]), 0.95)
+
+    def test_empty_or_invalid_positions_are_rejected(self):
+        returns = random_returns()
+        start = pd.Series({"A": 10.0, "B": 10.0})
+        for shares in (pd.Series(dtype=float), pd.Series({"A": 0.0, "B": 0.0})):
+            with self.assertRaisesRegex(ValueError, "no positions"):
+                simulate(returns, start, shares, 10, 5)
+        with self.assertRaisesRegex(ValueError, "Shares must be finite"):
+            simulate(returns, start, pd.Series({"A": np.nan}), 10, 5)
+        for price in (np.inf, 0.0, -1.0):
+            with self.assertRaisesRegex(ValueError, "finite and positive"):
+                simulate(returns, pd.Series({"A": price, "B": 10.0}), pd.Series({"A": 1.0}), 10, 5)
+
     def test_simulation_rejects_empty_horizon(self):
         returns = random_returns(symbols=("A",))
         for paths, days in ((10, 0), (0, 21)):
