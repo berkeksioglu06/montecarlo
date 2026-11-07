@@ -71,6 +71,32 @@ def kupiec(n: int, breaches: int, level: float) -> tuple[float, float]:
     return lr, math.erfc(math.sqrt(lr / 2))  # survival function of chi2(1)
 
 
+def christoffersen(breaches) -> tuple[float, float]:
+    """Christoffersen independence test: does a breach today change the chance of one next time?
+
+    Compares a model where the breach probability depends on whether the previous forecast was
+    breached with one where it does not. LR statistic and p-value (chi-squared, 1 dof). A low
+    p-value means breaches cluster. Needs non-overlapping forecasts; with very few breaches it
+    has almost no power.
+    """
+    hits = np.asarray(breaches, dtype=bool)
+    if len(hits) < 2:
+        raise ValueError("Need at least two forecasts")
+    prev, curr = hits[:-1], hits[1:]
+    n00, n01 = int(np.sum(~prev & ~curr)), int(np.sum(~prev & curr))
+    n10, n11 = int(np.sum(prev & ~curr)), int(np.sum(prev & curr))
+
+    def log_lik(stay, move, p):  # stay * log(1 - p) + move * log(p), with 0 * log(0) = 0
+        return (stay * math.log(1 - p) if stay else 0.0) + (move * math.log(p) if move else 0.0)
+
+    pooled = (n01 + n11) / len(curr)
+    pi0 = n01 / (n00 + n01) if n00 + n01 else 0.0
+    pi1 = n11 / (n10 + n11) if n10 + n11 else 0.0
+    lr = -2 * (log_lik(n00 + n10, n01 + n11, pooled) - log_lik(n00, n01, pi0) - log_lik(n10, n11, pi1))
+    lr = max(0.0, lr)
+    return lr, math.erfc(math.sqrt(lr / 2))
+
+
 def non_overlapping(results: pd.DataFrame, days: int, step: int) -> pd.DataFrame:
     # Forecasts whose horizons do not share any day, starting from the first one.
     if days % step:
@@ -85,10 +111,12 @@ def summarize(results: pd.DataFrame, levels, days: int, step: int) -> pd.DataFra
         breach = f"breach_{level:.0%}"
         n, x = len(independent), int(independent[breach].sum())
         lr, p_value = kupiec(n, x, level)
+        cluster_lr, cluster_p = christoffersen(independent[breach])
         rows.append({"level": level, "expected": 1 - level,
                      "all_n": len(results), "all_rate": results[breach].mean(),
                      "indep_n": n, "indep_breaches": x, "indep_rate": x / n,
-                     "kupiec_lr": lr, "p_value": p_value})
+                     "kupiec_lr": lr, "p_value": p_value,
+                     "cluster_lr": cluster_lr, "cluster_p": cluster_p})
     return pd.DataFrame(rows).set_index("level")
 
 
@@ -185,14 +213,15 @@ def main():
           f"{results.index[0].date()} to {results.index[-1].date()}; "
           f"{args.window}-return rolling window; {args.paths:,} paths; {args.drift} log drift\n")
     print(f"  {'level':<7}{'expected':<10}{'all (overlapping)':<20}"
-          f"{'non-overlapping':<20}{'Kupiec LR':<11}p-value")
+          f"{'non-overlapping':<20}{'Kupiec p':<10}{'clustering p':<13}expected breaches")
     for level, row in table.iterrows():
         print(f"  {level:<7.0%}{row.expected:<10.1%}"
               f"{f'{row.all_rate:.1%} of {row.all_n:.0f}':<20}"
               f"{f'{row.indep_breaches:.0f}/{row.indep_n:.0f} = {row.indep_rate:.1%}':<20}"
-              f"{row.kupiec_lr:<11.2f}{row.p_value:.3f}")
-    print("\nOverlapping windows share days, so their breaches cluster: use the rate as a description,"
-          "\nand the non-overlapping column for the test. A low p-value rejects the breach rate.")
+              f"{row.p_value:<10.3f}{row.cluster_p:<13.3f}{row.indep_n * row.expected:.1f}")
+    print("\nTests use only the non-overlapping forecasts. Kupiec: is the breach rate right?"
+          "\nChristoffersen (clustering): does one breach make the next more likely? A low p-value"
+          "\nrejects; with only a few expected breaches neither test can tell much.")
     print_breaches(results, 0.95)
     print(f"Saved per-date results to {args.out}")
 

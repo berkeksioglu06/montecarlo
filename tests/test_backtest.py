@@ -3,8 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from backtest import (backtest, breach_episodes, exceedance_summary, kupiec, non_overlapping,
-                      summarize)
+from backtest import (backtest, breach_episodes, christoffersen, exceedance_summary, kupiec,
+                      non_overlapping, summarize)
 
 
 def gbm_prices(n=600, vols=(0.02, 0.03), seed=5):
@@ -107,6 +107,22 @@ class BacktestTests(unittest.TestCase):
                                 "es_95%": 1.0, "breach_95%": False}, index=dates)
         self.assertTrue(breach_episodes(results).empty)
         self.assertEqual(exceedance_summary(results), {"breaches": 0})
+
+
+    def test_christoffersen_flags_clustered_breaches(self):
+        spread = np.zeros(500, dtype=bool)
+        spread[::20] = True  # 25 breaches, never back to back
+        clustered = np.zeros(500, dtype=bool)
+        clustered[100:125] = True  # the same 25 breaches in one run
+        self.assertGreater(christoffersen(spread)[1], 0.05)
+        lr, p_value = christoffersen(clustered)
+        self.assertGreater(lr, 50)
+        self.assertLess(p_value, 1e-6)
+        self.assertEqual(christoffersen(np.zeros(50, dtype=bool)), (0.0, 1.0))
+        # Hand-computed: 0 0 1 1 0 -> n00=1, n01=1, n10=1, n11=1; pi0 = pi1 = pooled = 0.5
+        self.assertAlmostEqual(christoffersen([0, 0, 1, 1, 0])[0], 0.0)
+        with self.assertRaises(ValueError):
+            christoffersen([True])
 
 
 if __name__ == "__main__":
