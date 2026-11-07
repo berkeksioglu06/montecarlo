@@ -14,6 +14,8 @@ python -m venv .venv
 
 Default symbols: ZETA, RKLB, PLTR, VLN, HIMS, MRVL, ACHR, EOSE. Requested history starts on 2021-01-01; shorter histories are reported. Override with `--start YYYY-MM-DD` or `--symbols TICKER ...`.
 
+Use `--as-of YYYY-MM-DD` to request a specific completed trading session. Without it, the latest completed session is required; incomplete provider bars fail validation rather than causing a silent fallback.
+
 Each run creates `data/yahoo_<UTC timestamp>/` with:
 
 - `raw/`: unchanged provider responses, including corporate actions.
@@ -38,5 +40,7 @@ Adjusted Close includes dividend adjustments and is a total-return proxy. Fixed-
 Adapted from [quant-ml/market_data.py](https://github.com/berkeksioglu06/quant-ml/blob/dd220ad388ca6c3a3e04ce5b671d5522d3fb693f/market_data.py): explicit Yahoo settings, completed-session cutoff, snapshot storage and quality checks. This repository runs independently; ML features, labels and training folds are excluded. Local datasets and personal holdings are ignored by Git.
 
 The GitHub Actions workflow runs tests and downloads all eight symbols when this data code changes, or when manually triggered. It commits a snapshot only after all symbols pass validation with at least 252 common sessions. Failed downloads leave diagnostics as a workflow artifact, not a usable dataset. There is no scheduled refresh.
+
+The initial workflow snapshot is explicitly pinned to 2026-11-05: Yahoo returned missing Close and Adj Close fields for 2026-11-06 during the first download. Manual workflow runs can specify another as-of date.
 
 Next: choose the estimation window, calculate daily log returns and covariance, then simulate 10,000 correlated GBM paths over 21 trading days.

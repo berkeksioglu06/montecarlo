@@ -97,9 +97,15 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def download(symbols: list[str], start: str, output: Path) -> Path:
+def download(symbols: list[str], start: str, output: Path, as_of: str | None = None) -> Path:
     now = datetime.now(UTC)
-    cutoff = last_complete_session(now)
+    latest = last_complete_session(now)
+    cutoff = pd.Timestamp(as_of) if as_of else latest
+    if cutoff > latest or cutoff != cutoff.normalize() or pd.isna(cutoff):
+        raise ValueError("As-of date must be a completed trading session")
+    cal = calendar(cutoff - pd.Timedelta(days=7), cutoff + pd.Timedelta(days=7))
+    if cutoff not in cal.sessions:
+        raise ValueError("As-of date must be a trading session")
     if pd.Timestamp(start) >= cutoff:
         raise ValueError("Start date must precede the latest completed session")
     snap = output / f"yahoo_{now:%Y%m%dT%H%M%S%fZ}"
@@ -107,6 +113,7 @@ def download(symbols: list[str], start: str, output: Path) -> Path:
     (snap / "clean").mkdir()
     manifest = {"source": "Yahoo Finance via yfinance", "downloaded_at": now.isoformat(),
                 "start": start, "last_complete_session": str(cutoff.date()),
+                "as_of": str(cutoff.date()), "latest_completed_session": str(latest.date()),
                 "options": OPTIONS, "calendar": "XNYS (US equity sessions)",
                 "versions": {p: version(p) for p in
                              ("yfinance", "pandas", "numpy", "exchange-calendars")},
@@ -184,6 +191,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbols", nargs="+", default=SYMBOLS)
     parser.add_argument("--start", default="2021-01-01")
+    parser.add_argument("--as-of", help="Optional completed session YYYY-MM-DD; no implicit fallback")
     parser.add_argument("--output", type=Path, default=Path(__file__).parent / "data")
     args = parser.parse_args()
     symbols = [s.upper() for s in args.symbols]
@@ -192,7 +200,9 @@ def main():
     try:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.start):
             raise ValueError("Start date must use YYYY-MM-DD")
-        download(symbols, args.start, args.output)
+        if args.as_of and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", args.as_of):
+            raise ValueError("As-of date must use YYYY-MM-DD")
+        download(symbols, args.start, args.output, args.as_of)
     except (ValueError, RuntimeError) as error:
         parser.exit(1, f"Error: {error}\n")
 
