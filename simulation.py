@@ -12,15 +12,39 @@ from returns import latest_snapshot, load_prices, log_returns
 
 PORTFOLIO = Path(__file__).parent / "portfolio.csv"
 MIN_RETURNS = 60
+LAMBDA = 0.94  # RiskMetrics daily decay
 
 
-def parameters(returns: pd.DataFrame, drift: str = "zero") -> tuple[pd.Series, pd.DataFrame]:
+def covariance(returns: pd.DataFrame, method: str = "equal", lam: float = LAMBDA) -> pd.DataFrame:
+    """Daily covariance of log returns.
+
+    equal: sample covariance, every day in the window weighs the same.
+    ewma: RiskMetrics exponentially weighted covariance around a zero mean. The newest day weighs
+    (1 - lam), each older day lam times the one after it; weights are rescaled to sum to one over
+    the window. With lam = 0.94 a day's weight halves in about 11 trading days. The result is
+    today's covariance and is held constant over the whole simulated horizon (no mean reversion).
+    """
+    if method == "equal":
+        return returns.cov()
+    if method != "ewma":
+        raise ValueError(f"Unknown covariance {method!r}; use 'equal' or 'ewma'")
+    if not 0 < lam < 1:
+        raise ValueError("EWMA lambda must be between 0 and 1")
+    data = returns.to_numpy(dtype=float)
+    weights = lam ** np.arange(len(data))[::-1]  # oldest row first, newest weight 1
+    weights /= weights.sum()
+    cov = (data * weights[:, None]).T @ data
+    return pd.DataFrame(cov, index=returns.columns, columns=returns.columns)
+
+
+def parameters(returns: pd.DataFrame, drift: str = "zero", cov: str = "equal",
+               lam: float = LAMBDA) -> tuple[pd.Series, pd.DataFrame]:
     # "zero" sets the mean *log* return to zero: median price is unchanged, but the expected
     # simple return is still positive (exp(sigma^2 T / 2) - 1), larger for volatile stocks.
     # "historical" uses the sample mean log return, which already contains the -sigma^2/2 drag.
     if len(returns) < max(MIN_RETURNS, returns.shape[1] + 1):
         raise ValueError(f"Need at least {MIN_RETURNS} daily returns to calibrate, got {len(returns)}")
-    cov = returns.cov()
+    cov = covariance(returns, cov, lam)
     if not np.isfinite(cov.to_numpy()).all():
         raise ValueError("Covariance has non-finite entries")
     if drift == "zero":
@@ -102,12 +126,13 @@ def align_positions(symbols: pd.Index, start: pd.Series,
 
 
 def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths: int = 10_000,
-             n_days: int = 21, seed: int = 0, drift: str = "zero") -> np.ndarray:
+             n_days: int = 21, seed: int = 0, drift: str = "zero", cov: str = "equal",
+             lam: float = LAMBDA) -> np.ndarray:
     if n_paths < 1 or n_days < 1:
         raise ValueError("Paths and days must be positive")
     start, shares = align_positions(returns.columns, start, shares)
-    mean, cov = parameters(returns, drift)
-    shocks = correlated_shocks(cov, n_paths, n_days, np.random.default_rng(seed))
+    mean, matrix = parameters(returns, drift, cov, lam)
+    shocks = correlated_shocks(matrix, n_paths, n_days, np.random.default_rng(seed))
     return portfolio_values(price_paths(start, mean, shocks), shares)
 
 
@@ -121,6 +146,18 @@ def add_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--drift", choices=["zero", "historical"], default="zero",
                         help="zero: zero mean log return (not zero expected return); "
                              "historical: sample mean log return")
+    model_arguments(parser)
+
+
+def model_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument("--cov", choices=["equal", "ewma"], default="equal",
+                        help="equal: every day in the window weighs the same; "
+                             "ewma: recent days weigh more (RiskMetrics)")
+    parser.add_argument("--lam", type=float, default=LAMBDA, help="EWMA decay per day")
+
+
+def model_label(args) -> str:
+    return "equal-weight covariance" if args.cov == "equal" else f"EWMA covariance (lambda {args.lam})"
 
 
 def load_inputs(args) -> tuple[pd.DataFrame, pd.Series, pd.Series, str]:
@@ -141,12 +178,13 @@ def main():
     args = parser.parse_args()
     try:
         returns, start, shares, source = load_inputs(args)
-        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift)
+        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
+                          args.cov, args.lam)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
     now, end = values[0, 0], values[:, -1]
     print(f"Start ${now:,.0f} ({source}); {args.paths:,} paths x {args.days} days; "
-          f"{args.drift} log drift; calibrated on {len(returns)} returns\n")
+          f"{args.drift} log drift; {model_label(args)}; calibrated on {len(returns)} returns\n")
     print("Value at horizon end:")
     for q in (1, 5, 25, 50, 75, 95, 99):
         value = np.percentile(end, q)

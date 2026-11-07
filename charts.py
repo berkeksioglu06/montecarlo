@@ -175,7 +175,8 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     try:
         returns, start, shares, _ = load_inputs(args)
-        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift)
+        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
+                          args.cov, args.lam)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
     written = [paths_chart(values, args.out / "paths.png", args.days, seed=args.seed),

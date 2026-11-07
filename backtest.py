@@ -11,14 +11,15 @@ import pandas as pd
 
 from returns import latest_snapshot, load_prices, log_returns
 from risk import LEVELS, losses, var_es
-from simulation import MIN_RETURNS, PORTFOLIO, align_positions, load_portfolio, simulate
+from simulation import (LAMBDA, MIN_RETURNS, PORTFOLIO, align_positions, load_portfolio,
+                        model_arguments, model_label, simulate)
 
 REPORTS = Path(__file__).parent / "reports"
 
 
 def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int = 21,
              window: int = 252, n_paths: int = 5_000, seed: int = 0, drift: str = "zero",
-             step: int = 1) -> pd.DataFrame:
+             step: int = 1, cov: str = "equal", lam: float = LAMBDA) -> pd.DataFrame:
     """One row per forecast date t.
 
     The model at t sees only prices up to and including t: it is calibrated on the last `window`
@@ -34,7 +35,7 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
     for i in range(window, len(prices) - days, step):
         known = prices.iloc[i - window:i + 1]  # window + 1 closes -> window returns, ending at t
         start = known.iloc[-1]
-        values = simulate(log_returns(known), start, shares, n_paths, days, seed + i, drift)
+        values = simulate(log_returns(known), start, shares, n_paths, days, seed + i, drift, cov, lam)
         simulated = losses(values)
         value_now = float(start @ shares)
         realized = value_now - float(prices.iloc[i + days] @ shares)
@@ -42,7 +43,8 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
             raise ValueError(f"Realized loss at {prices.index[i].date()} is not finite")
         # days and window travel with each row so charts never have to guess the settings.
         row = {"date": prices.index[i], "end": prices.index[i + days], "days": days,
-               "window": window, "value": value_now, "loss": realized}
+               "window": window, "cov": cov, "lam": lam if cov == "ewma" else np.nan,
+               "value": value_now, "loss": realized}
         for level in levels:
             var, es = var_es(simulated, level)
             row[f"var_{level:.0%}"] = var
@@ -193,6 +195,7 @@ def main():
     parser.add_argument("--step", type=int, default=1, help="Trading days between forecasts")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--drift", choices=["zero", "historical"], default="zero")
+    model_arguments(parser)
     parser.add_argument("--out", type=Path, default=REPORTS / "backtest.csv")
     args = parser.parse_args()
     try:
@@ -203,7 +206,7 @@ def main():
         # Historical closes are the start prices here; the portfolio's price column is ignored.
         shares = load_portfolio(args.portfolio)["shares"].astype(float)
         results = backtest(prices, shares, LEVELS, args.days, args.window, args.paths,
-                           args.seed, args.drift, args.step)
+                           args.seed, args.drift, args.step, args.cov, args.lam)
         table = summarize(results, LEVELS, args.days, args.step)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
@@ -211,7 +214,8 @@ def main():
     results.to_csv(args.out)
     print(f"{snapshot.name}: {len(results)} forecasts of {args.days}-day loss, "
           f"{results.index[0].date()} to {results.index[-1].date()}; "
-          f"{args.window}-return rolling window; {args.paths:,} paths; {args.drift} log drift\n")
+          f"{args.window}-return rolling window; {args.paths:,} paths; {args.drift} log drift;\n"
+          f"{model_label(args)}\n")
     print(f"  {'level':<7}{'expected':<10}{'all (overlapping)':<20}"
           f"{'non-overlapping':<20}{'Kupiec p':<10}{'clustering p':<13}expected breaches")
     for level, row in table.iterrows():

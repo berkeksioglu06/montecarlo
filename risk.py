@@ -8,7 +8,8 @@ from statistics import NormalDist
 import numpy as np
 import pandas as pd
 
-from simulation import add_arguments, align_positions, load_inputs, simulate
+from simulation import (LAMBDA, add_arguments, align_positions, covariance, load_inputs,
+                        model_label, simulate)
 
 LEVELS = (0.95, 0.99)
 
@@ -40,24 +41,24 @@ def max_drawdown(values: np.ndarray) -> np.ndarray:
     return (1 - values / peaks).max(axis=1)
 
 
-def variance_contribution(returns: pd.DataFrame, start: pd.Series, shares: pd.Series) -> pd.DataFrame:
+def variance_contribution(returns: pd.DataFrame, start: pd.Series, shares: pd.Series,
+                          cov: str = "equal", lam: float = LAMBDA) -> pd.DataFrame:
     # Euler split of *daily* portfolio variance: w_i (Cov w)_i / w'Cov w, summing to 1.
     # Not a contribution to the 21-day simulated VaR, which is a different (non-linear) quantity.
     start, shares = align_positions(returns.columns, start, shares)
     exposure = start * shares
-    cov = returns.cov()
-    marginal = cov @ exposure
+    marginal = covariance(returns, cov, lam) @ exposure
     return pd.DataFrame({"weight": exposure / exposure.sum(),
                          "variance_share": exposure * marginal / (exposure @ marginal)})
 
 
 def parametric_var(returns: pd.DataFrame, start: pd.Series, shares: pd.Series,
-                   level: float, days: int) -> float:
+                   level: float, days: int, cov: str = "equal", lam: float = LAMBDA) -> float:
     # Approximate reference only: treats the portfolio return as normal and linear (delta-normal,
     # zero mean). The simulation compounds lognormal prices, so the two can differ at long horizons.
     start, shares = align_positions(returns.columns, start, shares)
     exposure = start * shares
-    sigma = np.sqrt(exposure @ returns.cov() @ exposure * days)
+    sigma = np.sqrt(exposure @ covariance(returns, cov, lam) @ exposure * days)
     return float(NormalDist().inv_cdf(level) * sigma)
 
 
@@ -78,20 +79,21 @@ def main():
     args = parser.parse_args()
     try:
         returns, start, shares, source = load_inputs(args)
-        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift)
-        contribution = variance_contribution(returns, start, shares)
+        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
+                          args.cov, args.lam)
+        contribution = variance_contribution(returns, start, shares, args.cov, args.lam)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
     now = values[0, 0]
     pct = lambda x: f"${x:>7,.0f} ({x / now:5.1%})"
     print(f"Start ${now:,.0f} ({source}); {args.paths:,} paths x {args.days} days; "
-          f"{args.drift} log drift; calibrated on {len(returns)} returns\n")
+          f"{args.drift} log drift; {model_label(args)}; calibrated on {len(returns)} returns\n")
     print("Losses (L = start value - value at horizon; positive is a loss):")
     print(f"  {'horizon':<8}{'level':<7}{'VaR':<19}{'ES (CVaR)':<19}parametric VaR (approx.)")
     for day in sorted({1, args.days}):
         for level in LEVELS:
             var, es = var_es(losses(values, day), level)
-            ref = parametric_var(returns, start, shares, level, day)
+            ref = parametric_var(returns, start, shares, level, day, args.cov, args.lam)
             print(f"  {f'{day}d':<8}{level:<7.0%}{pct(var):<19}{pct(es):<19}{pct(ref)}")
     drawdown = max_drawdown(values)
     print(f"\nMax drawdown within {args.days} days: median {np.median(drawdown):.1%}, "
