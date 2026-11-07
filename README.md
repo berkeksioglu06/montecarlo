@@ -1,6 +1,6 @@
 # montecarlo
 
-Portfolio risk simulation, built step by step. Current step: historical price collection and validation. The GBM simulator is not implemented yet.
+Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, and Monte Carlo risk metrics. Backtesting is next.
 
 ## Setup and download
 
@@ -43,4 +43,18 @@ The GitHub Actions workflow runs tests and downloads all eight symbols when this
 
 The initial workflow snapshot is explicitly pinned to 2026-11-05: Yahoo returned missing Close and Adj Close fields for 2026-11-06 during the first download. Manual workflow runs can specify another as-of date.
 
-Next: choose the estimation window, calculate daily log returns and covariance, then simulate 10,000 correlated GBM paths over 21 trading days.
+## Simulation and risk
+
+Copy `portfolio.example.csv` to `portfolio.csv` (ignored by Git) and fill in share counts. The optional `price` column sets start prices; blank uses the snapshot's last close.
+
+```sh
+.venv\Scripts\python returns.py      # volatility, tails, correlation
+.venv\Scripts\python simulation.py   # distribution of portfolio value after 21 days
+.venv\Scripts\python risk.py         # VaR, ES, drawdown, variance shares
+```
+
+- `returns.py`: daily log returns from the latest READY snapshot's adjusted closes.
+- `simulation.py`: Cholesky-correlated normal log returns; prices compound as GBM with fixed shares. `--drift zero` (default) sets the mean log return to zero, which is not a zero expected return; `--drift historical` uses the sample mean.
+- `risk.py`: losses are `L = V0 - VT` (positive is a loss). VaR is the mildest loss in the worst `ceil(N(1 - level))` outcomes and ES is their mean. Parametric VaR is a delta-normal approximation, not an exact check; the exact check is the single-stock GBM test. Variance shares split daily portfolio variance, not the 21-day VaR.
+
+Known limitation: normal shocks understate these stocks' fat tails (historical excess kurtosis 3 to 15).

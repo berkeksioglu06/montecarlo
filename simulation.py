@@ -80,10 +80,9 @@ def start_prices(last_close: pd.Series, portfolio: pd.DataFrame) -> pd.Series:
     return start
 
 
-def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths: int = 10_000,
-             n_days: int = 21, seed: int = 0, drift: str = "zero") -> np.ndarray:
+def align_positions(symbols: pd.Index, start: pd.Series,
+                    shares: pd.Series) -> tuple[pd.Series, pd.Series]:
     # Align by symbol, never by position.
-    symbols = returns.columns
     unknown = shares.index.difference(symbols)
     if len(unknown):
         raise ValueError(f"No price history for: {', '.join(unknown)}")
@@ -91,13 +90,18 @@ def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths
     start = start.reindex(symbols)
     if start.isna().any():
         raise ValueError(f"Missing start price for: {', '.join(start.index[start.isna()])}")
+    return start, shares
+
+
+def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths: int = 10_000,
+             n_days: int = 21, seed: int = 0, drift: str = "zero") -> np.ndarray:
+    start, shares = align_positions(returns.columns, start, shares)
     mean, cov = parameters(returns, drift)
     shocks = correlated_shocks(cov, n_paths, n_days, np.random.default_rng(seed))
     return portfolio_values(price_paths(start, mean, shocks), shares)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def add_arguments(parser: argparse.ArgumentParser):
     parser.add_argument("--snapshot", type=Path, help="Snapshot folder; defaults to the latest READY one")
     parser.add_argument("--start", help="First price date YYYY-MM-DD for calibration")
     parser.add_argument("--portfolio", type=Path, default=PORTFOLIO)
@@ -107,20 +111,29 @@ def main():
     parser.add_argument("--drift", choices=["zero", "historical"], default="zero",
                         help="zero: zero mean log return (not zero expected return); "
                              "historical: sample mean log return")
-    args = parser.parse_args()
-    try:
-        prices = load_prices(args.snapshot or latest_snapshot(), args.start)
-        returns = log_returns(prices)
-        portfolio = load_portfolio(args.portfolio)
-        start = start_prices(prices.iloc[-1], portfolio)
-        values = simulate(returns, start, portfolio["shares"].astype(float), args.paths,
-                          args.days, args.seed, args.drift)
-    except (ValueError, FileNotFoundError) as error:
-        parser.exit(1, f"Error: {error}\n")
+
+
+def load_inputs(args) -> tuple[pd.DataFrame, pd.Series, pd.Series, str]:
+    """Returns, start prices, shares and a label saying where the start prices came from."""
+    prices = load_prices(args.snapshot or latest_snapshot(), args.start)
+    portfolio = load_portfolio(args.portfolio)
     given = portfolio.get("price", pd.Series(dtype=float)).notna()
     source = (f"{prices.index[-1].date()} close" if not given.any() else
               "portfolio prices" if given.all() else
               f"portfolio prices, {prices.index[-1].date()} close where blank")
+    return (log_returns(prices), start_prices(prices.iloc[-1], portfolio),
+            portfolio["shares"].astype(float), source)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_arguments(parser)
+    args = parser.parse_args()
+    try:
+        returns, start, shares, source = load_inputs(args)
+        values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift)
+    except (ValueError, FileNotFoundError) as error:
+        parser.exit(1, f"Error: {error}\n")
     now, end = values[0, 0], values[:, -1]
     print(f"Start ${now:,.0f} ({source}); {args.paths:,} paths x {args.days} days; "
           f"{args.drift} log drift; calibrated on {len(returns)} returns\n")
