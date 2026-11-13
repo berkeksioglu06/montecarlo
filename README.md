@@ -1,6 +1,6 @@
 # montecarlo
 
-Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, Monte Carlo risk metrics and a rolling VaR backtest, with charts. On top of that measurement layer sits the research question: keeping the same stocks and changing only their weights, how much can the 21-day bad-case loss be cut, and how much upside survives?
+Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, Monte Carlo risk metrics and a rolling VaR backtest, with charts. On top of that measurement layer sits the research question: keeping the same stocks and changing only their weights, how much can the 21-day bad-case loss be cut, and how much upside survives? A small local app (`app.py`) puts the simulation and the weights model behind one page.
 
 ## Setup and download
 
@@ -142,3 +142,15 @@ Settings, on the 168 rebalance dates that every setting can be tested on (`--ste
 The default was fixed before this comparison (it is the backtest's window) and nothing here argues for changing it: longer windows cut less, and EWMA cuts the same for three times the trading. Different seeds move single weights by about a point and leave the ES unchanged to four decimals, because ES is flat around its minimum.
 
 Limits: the eight stocks were chosen today and today's weights reflect past winners; trading costs and taxes are not modeled, and the weights move about 10% of the portfolio at each monthly rebalance; volatility is constant inside the horizon; the output is a model result on five years of data, not a recommendation to trade.
+
+## The app
+
+```sh
+.venv\Scripts\python app.py
+```
+
+opens a local page (http://127.0.0.1:8000, this machine only; `--port` to change it). Enter tickers and share counts, pick a horizon and press Spin: the page shows the simulated value paths, the outcome distribution with the worst 5% marked, the bad and good case, and each stock's share of the risk. Reweight then runs the weights model on the same stocks and shows the current and model weights side by side, with both portfolios placed against the frontier.
+
+- `app.py` is a small standard-library server around the functions the scripts use (`simulate`, `var_es`, `model_weights`, `frontier`); `web/index.html` is the whole page, with no external libraries. Both steps calibrate on the last 252 daily returns, the window the backtest and the walk-forward test use.
+- The form starts with `portfolio.csv` if it exists, otherwise with the example. Tickers that no saved snapshot has are downloaded with `market_data.py`'s checks into `data/app/`, which Git ignores and the scripts never read. "Update prices" downloads again up to the latest completed session.
+- Bad input (unknown ticker, zero shares, a stock with less than a year of history) comes back as a message on the page.

@@ -15,6 +15,7 @@ portfolio.csv
 .env
 .env.*
 !.env.example
+.claude/
 .vscode/
 .idea/
 .DS_Store
