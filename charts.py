@@ -1,4 +1,4 @@
-"""Charts: VaR backtest over time, simulated 21-day outcome distribution, return correlations."""
+"""Charts: VaR backtest, simulated 21-day outcomes, return correlations, reweighting frontier."""
 
 from __future__ import annotations
 
@@ -165,11 +165,44 @@ def correlation_chart(returns: pd.DataFrame, path: Path) -> Path:
     return path
 
 
+def frontier_chart(table: pd.DataFrame, path: Path) -> Path:
+    """Bad case against good case for the portfolios saved by frontier.py."""
+    days, scenarios = int(table["days"].iat[0]), table["scenarios"].iat[0]
+    kind = table.set_index("portfolio")
+    cloud, curve = kind.loc[["random"]], kind.loc[["frontier"]]
+    with plt.rc_context(STYLE):
+        fig, ax = plt.subplots(figsize=(9, 5.5))
+        ax.scatter(cloud["es"], cloud["upside"], s=8, color="#cfcec9", label="Random weightings")
+        ax.plot(curve["es"], curve["upside"], color=VAR_99, linewidth=2,
+                label="Frontier: least ES for each expected return")
+        for name, color, side in (("current", BREACH, "left"), ("equal weight", INK_2, "right"),
+                                  ("min ES", VAR_99, "left")):
+            point = kind.loc[name]
+            ax.scatter(point["es"], point["upside"], s=60, color=color, zorder=3,
+                       edgecolors=SURFACE, linewidths=1.5)
+            ax.annotate(name, (point["es"], point["upside"]), ha=side, fontsize=9, color=color,
+                        xytext=(8, -4) if side == "left" else (-6, 8), textcoords="offset points")
+        ax.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
+        ax.set_xlabel(f"Bad case: mean {days}-day loss in the worst 5% of scenarios (ES)")
+        ax.set_ylabel("Good case: gain beaten only by the best 5%")
+        ax.set_title("Same stocks, different weights: bad case vs. good case", pad=24)
+        ax.text(0, 1.02, f"Every portfolio measured on the same scenarios; {scenarios}",
+                transform=ax.transAxes, color=INK_2, fontsize=9, va="bottom")
+        ax.legend(loc="lower right", fontsize=9)
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     add_arguments(parser)
     parser.add_argument("--backtest", type=Path, default=REPORTS / "backtest.csv",
                         help="Per-date results written by backtest.py")
+    parser.add_argument("--frontier", type=Path, default=REPORTS / "frontier.csv",
+                        help="Portfolios written by frontier.py")
     parser.add_argument("--out", type=Path, default=REPORTS, help="Folder for the PNG files")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -190,6 +223,10 @@ def main():
             print(f"Skipped backtest chart: {error}")
     else:
         print(f"Skipped backtest chart: {args.backtest} not found; run backtest.py first")
+    if args.frontier.exists():
+        written.append(frontier_chart(pd.read_csv(args.frontier), args.out / "frontier.png"))
+    else:
+        print(f"Skipped frontier chart: {args.frontier} not found; run frontier.py first")
     for path in written:
         print(f"Wrote {path}")
 

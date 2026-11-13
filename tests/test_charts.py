@@ -7,7 +7,8 @@ import pandas as pd
 
 from backtest import backtest
 from charts import (backtest_chart, backtest_labels, correlation_chart, distribution_chart,
-                    paths_chart)
+                    frontier_chart, paths_chart)
+from frontier import compare, frontier, random_mixes, scenarios
 from simulation import simulate
 from test_backtest import SHARES, gbm_prices
 
@@ -27,6 +28,17 @@ class ChartTests(unittest.TestCase):
                      correlation_chart(returns, Path(tmp) / "c.png")]
             for path in paths:
                 self.assertEqual(path.read_bytes()[:4], PNG)
+
+    def test_frontier_chart_reads_saved_csv(self):
+        scen = scenarios(np.log(gbm_prices(n=150)).diff().iloc[1:], 500, 5)
+        table = pd.concat([compare(scen, pd.Series({"A": 0.1, "B": 0.9})).rename_axis("portfolio").reset_index(),
+                           frontier(scen, 4).assign(portfolio="frontier"),
+                           random_mixes(scen, 20).assign(portfolio="random")])
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = Path(tmp) / "frontier.csv"
+            table.assign(days=5, scenarios="test").to_csv(csv, index=False)
+            path = frontier_chart(pd.read_csv(csv), Path(tmp) / "f.png")
+            self.assertEqual(path.read_bytes()[:4], PNG)
 
     def test_backtest_chart_reads_saved_csv(self):
         # The chart must work on what backtest.py writes, not only on the in-memory frame.

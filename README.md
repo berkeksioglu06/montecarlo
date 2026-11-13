@@ -1,6 +1,6 @@
 # montecarlo
 
-Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, Monte Carlo risk metrics and a rolling VaR backtest, with charts.
+Portfolio risk simulation, built step by step: price collection, daily log returns, correlated GBM simulation of a fixed-share portfolio, Monte Carlo risk metrics and a rolling VaR backtest, with charts. On top of that measurement layer sits the research question: keeping the same stocks and changing only their weights, how much can the 21-day bad-case loss be cut, and how much upside survives?
 
 ## Setup and download
 
@@ -75,3 +75,45 @@ Fat tails: these stocks' daily returns have excess kurtosis 3 to 15, which norma
 | 21 days | EWMA | t, nu 5 | 4.3% | 1.0% |
 
 At one day, normal shocks are rejected at 99% and t fixes it, at the cost of a lower 95% VaR. Over 21 days t changes almost nothing: a sum of 21 independent daily shocks has 1/21 of the daily excess kurtosis, so it is close to normal whatever the daily shape. Monthly fat tails in real prices come mostly from volatility that changes over time, which neither model simulates within the horizon.
+
+## Reweighting: less bad case, how much upside?
+
+Same stocks, long only, weights sum to 100%, no trading inside the 21 days. Only the weights change.
+
+```sh
+.venv\Scripts\python frontier.py      # frontier and the current portfolio's distance from it (~20 s)
+.venv\Scripts\python walkforward.py   # out-of-sample test (~30 s)
+.venv\Scripts\python charts.py        # adds reports/frontier.png
+```
+
+- Bad case: 95% expected shortfall (ES), the mean 21-day loss in the worst 5% of scenarios. Good case ("upside"): the 21-day gain that only the best 5% of scenarios beat. Both are shares of today's value.
+- `frontier.py` simulates the 21-day return of every stock once and judges every set of weights on those same scenarios, so portfolios differ by their weights and not by simulation luck. For a buy-and-hold portfolio the return is exactly the weighted sum of the stock returns. Minimum-ES weights come from the Rockafellar-Uryasev linear program, so the optimum is global. The frontier is the least ES for each expected-return target, from the safest mix up to the single highest-mean stock. The mean is the target because it is the only reward that keeps the problem linear; the upside is then measured on each frontier portfolio. 1,000 random weightings are drawn as a check: none reaches more upside than the frontier at the same ES by more than about half a point.
+- Scenarios come from the GBM model (`--source gbm`, default) or from a block bootstrap of real days (`--source bootstrap`, `--block 5`), which keeps joint crashes, skew and week-long volatility clustering. `--drift zero` centers every stock's mean log return at zero in both sources; `--drift historical` keeps the sample mean. That gives a 2 x 2 comparison of drift assumption and return shape.
+- `walkforward.py`: every 21 trading days the weights are re-optimized on the last 252 returns only, held for 21 days and scored on the actual closes. Four strategies: today's weights (applied at every date), equal weight, minimum ES, and minimum ES with at least the model mean of today's weights.
+
+What the model says today (10,000 scenarios, full history; ES cut and upside kept relative to the current weights):
+
+| scenarios | drift | min ES: ES cut | min ES: upside kept | equal weight: ES cut | equal weight: upside kept |
+|---|---|---|---|---|---|
+| GBM | zero | 13% | 88% | 8% | 99% |
+| GBM | historical | 12% | 88% | 5% | 92% |
+| bootstrap | zero | 11% | 89% | 7% | 99% |
+| bootstrap | historical | 9% | 85% | 3% | 93% |
+
+What happened out of sample (48 non-overlapping 21-day periods, 2022-09 to 2026-10):
+
+| strategy | mean | realized ES | realized upside | ES cut | upside kept |
+|---|---|---|---|---|---|
+| current weights | 6.1% | 19.9% | 27.1% | | |
+| equal weight | 5.9% | 18.4% | 40.5% | 8% | 149% |
+| min ES at same mean | 5.5% | 17.7% | 27.0% | 11% | 100% |
+| min ES | 5.5% | 17.6% | 26.3% | 11% | 97% |
+
+Reading it:
+
+- The cut is real but modest: about a tenth of the bad case, in the model and out of sample. The stocks are all volatile and move together, so reweighting cannot diversify much away; the concentration costs less than the weights suggest.
+- In the model the upside falls almost as fast as the bad case (ES down 13%, upside down 12% under zero drift). Adding historical drift or real return shapes does not change that, so the answer is not an artifact of the symmetric model.
+- Run with a rebalance every 3 days instead (`--step 3`: 336 overlapping periods, so every start date counts), min ES cut the realized ES by 12% and kept 89% of the upside, almost exactly what the model predicts. Equal weight cut nothing there (-2%) and kept 110%: its good showing on the 48 periods depends on where the windows start.
+- With other scenario settings the 48-period ES cut of min ES ranges from 3% to 15%. Realized ES and upside rest on three periods each out of 48, so differences of a point or two are noise.
+
+Limits: the eight stocks were chosen today and today's weights reflect past winners; no trading costs or taxes, and the min-ES weights move a lot between rebalances; volatility is constant inside the horizon; different seeds move individual min-ES weights by a few points because ES is flat near the optimum.
