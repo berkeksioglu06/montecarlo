@@ -15,7 +15,7 @@ from matplotlib.ticker import MaxNLocator, PercentFormatter  # noqa: E402
 
 from backtest import REPORTS  # noqa: E402
 from risk import losses, var_es  # noqa: E402
-from simulation import add_arguments, load_inputs, simulate  # noqa: E402
+from simulation import add_arguments, load_inputs, model_options, simulate  # noqa: E402
 
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 VAR_95, VAR_99 = "#6da7ec", "#184f95"  # one blue ramp: lighter = milder level
@@ -176,7 +176,7 @@ def main():
     try:
         returns, start, shares, _ = load_inputs(args)
         values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
-                          args.cov, args.lam)
+                          **model_options(args))
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
     written = [paths_chart(values, args.out / "paths.png", args.days, seed=args.seed),

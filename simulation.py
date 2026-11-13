@@ -13,6 +13,7 @@ from returns import latest_snapshot, load_prices, log_returns
 PORTFOLIO = Path(__file__).parent / "portfolio.csv"
 MIN_RETURNS = 60
 LAMBDA = 0.94  # RiskMetrics daily decay
+NU = 5  # Student-t degrees of freedom: excess kurtosis 6 / (nu - 4) = 6 for each stock
 
 
 def covariance(returns: pd.DataFrame, method: str = "equal", lam: float = LAMBDA) -> pd.DataFrame:
@@ -56,16 +57,30 @@ def parameters(returns: pd.DataFrame, drift: str = "zero", cov: str = "equal",
     return mean, cov
 
 
-def correlated_shocks(cov: pd.DataFrame, n_paths: int, n_days: int,
-                      rng: np.random.Generator) -> np.ndarray:
-    # Cholesky: cov = L @ L.T. If z ~ N(0, I) then L @ z ~ N(0, cov).
-    # Volatility lives inside L, so shocks are not scaled by sigma again.
+def correlated_shocks(cov: pd.DataFrame, n_paths: int, n_days: int, rng: np.random.Generator,
+                      shocks: str = "normal", nu: float = NU) -> np.ndarray:
+    """Daily log-return shocks with covariance `cov`, shape (paths, days, assets).
+
+    normal: Cholesky, cov = L @ L.T. If z ~ N(0, I) then L @ z ~ N(0, cov). Volatility lives
+    inside L, so shocks are not scaled by sigma again.
+    t: multivariate Student-t. Each path-day draws one W ~ chi2(nu) shared by all stocks and
+    multiplies the normal shock by sqrt((nu - 2) / W). E[(nu - 2) / W] = 1, so the covariance is
+    still `cov` and only the shape changes: more very calm days, more very large ones. Because W is
+    shared, large moves arrive together (tail dependence), which correlation alone cannot express.
+    Same seed, same z: the t shocks rescale the normal ones, so comparisons share random numbers.
+    """
     try:
         lower = np.linalg.cholesky(cov.to_numpy())
     except np.linalg.LinAlgError as error:
         raise ValueError("Covariance is not positive definite") from error
     z = rng.standard_normal((n_paths, n_days, len(lower)))
-    return z @ lower.T  # shape: (paths, days, assets)
+    if shocks == "t":
+        if not nu > 2:
+            raise ValueError("Student-t needs nu > 2 for a finite variance")
+        z *= np.sqrt((nu - 2) / rng.chisquare(nu, (n_paths, n_days, 1)))
+    elif shocks != "normal":
+        raise ValueError(f"Unknown shocks {shocks!r}; use 'normal' or 't'")
+    return z @ lower.T
 
 
 def price_paths(start: pd.Series, mean: pd.Series, shocks: np.ndarray) -> np.ndarray:
@@ -127,13 +142,13 @@ def align_positions(symbols: pd.Index, start: pd.Series,
 
 def simulate(returns: pd.DataFrame, start: pd.Series, shares: pd.Series, n_paths: int = 10_000,
              n_days: int = 21, seed: int = 0, drift: str = "zero", cov: str = "equal",
-             lam: float = LAMBDA) -> np.ndarray:
+             lam: float = LAMBDA, shocks: str = "normal", nu: float = NU) -> np.ndarray:
     if n_paths < 1 or n_days < 1:
         raise ValueError("Paths and days must be positive")
     start, shares = align_positions(returns.columns, start, shares)
     mean, matrix = parameters(returns, drift, cov, lam)
-    shocks = correlated_shocks(matrix, n_paths, n_days, np.random.default_rng(seed))
-    return portfolio_values(price_paths(start, mean, shocks), shares)
+    draws = correlated_shocks(matrix, n_paths, n_days, np.random.default_rng(seed), shocks, nu)
+    return portfolio_values(price_paths(start, mean, draws), shares)
 
 
 def add_arguments(parser: argparse.ArgumentParser):
@@ -154,10 +169,20 @@ def model_arguments(parser: argparse.ArgumentParser):
                         help="equal: every day in the window weighs the same; "
                              "ewma: recent days weigh more (RiskMetrics)")
     parser.add_argument("--lam", type=float, default=LAMBDA, help="EWMA decay per day")
+    parser.add_argument("--shocks", choices=["normal", "t"], default="normal",
+                        help="normal: Gaussian daily shocks; t: Student-t with the same covariance "
+                             "and fatter tails")
+    parser.add_argument("--nu", type=float, default=NU, help="Student-t degrees of freedom (> 2)")
 
 
 def model_label(args) -> str:
-    return "equal-weight covariance" if args.cov == "equal" else f"EWMA covariance (lambda {args.lam})"
+    cov = "equal-weight covariance" if args.cov == "equal" else f"EWMA covariance (lambda {args.lam})"
+    return f"{cov}; " + ("normal shocks" if args.shocks == "normal" else f"Student-t shocks (nu {args.nu})")
+
+
+def model_options(args) -> dict:
+    """Keyword arguments for simulate() and backtest() from the parsed model arguments."""
+    return {"cov": args.cov, "lam": args.lam, "shocks": args.shocks, "nu": args.nu}
 
 
 def load_inputs(args) -> tuple[pd.DataFrame, pd.Series, pd.Series, str]:
@@ -179,7 +204,7 @@ def main():
     try:
         returns, start, shares, source = load_inputs(args)
         values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
-                          args.cov, args.lam)
+                          **model_options(args))
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
     now, end = values[0, 0], values[:, -1]

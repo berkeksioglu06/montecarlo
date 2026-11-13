@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from simulation import (LAMBDA, add_arguments, align_positions, covariance, load_inputs,
-                        model_label, simulate)
+                        model_label, model_options, simulate)
 
 LEVELS = (0.95, 0.99)
 
@@ -55,7 +55,7 @@ def variance_contribution(returns: pd.DataFrame, start: pd.Series, shares: pd.Se
 def parametric_var(returns: pd.DataFrame, start: pd.Series, shares: pd.Series,
                    level: float, days: int, cov: str = "equal", lam: float = LAMBDA) -> float:
     # Approximate reference only: treats the portfolio return as normal and linear (delta-normal,
-    # zero mean). The simulation compounds lognormal prices, so the two can differ at long horizons.
+    # zero mean), whatever shocks the simulation uses. The simulation compounds lognormal prices, so the two can differ at long horizons.
     start, shares = align_positions(returns.columns, start, shares)
     exposure = start * shares
     sigma = np.sqrt(exposure @ covariance(returns, cov, lam) @ exposure * days)
@@ -80,7 +80,7 @@ def main():
     try:
         returns, start, shares, source = load_inputs(args)
         values = simulate(returns, start, shares, args.paths, args.days, args.seed, args.drift,
-                          args.cov, args.lam)
+                          **model_options(args))
         contribution = variance_contribution(returns, start, shares, args.cov, args.lam)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")

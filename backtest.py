@@ -11,15 +11,16 @@ import pandas as pd
 
 from returns import latest_snapshot, load_prices, log_returns
 from risk import LEVELS, losses, var_es
-from simulation import (LAMBDA, MIN_RETURNS, PORTFOLIO, align_positions, load_portfolio,
-                        model_arguments, model_label, simulate)
+from simulation import (LAMBDA, MIN_RETURNS, NU, PORTFOLIO, align_positions, load_portfolio,
+                        model_arguments, model_label, model_options, simulate)
 
 REPORTS = Path(__file__).parent / "reports"
 
 
 def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int = 21,
              window: int = 252, n_paths: int = 5_000, seed: int = 0, drift: str = "zero",
-             step: int = 1, cov: str = "equal", lam: float = LAMBDA) -> pd.DataFrame:
+             step: int = 1, cov: str = "equal", lam: float = LAMBDA, shocks: str = "normal",
+             nu: float = NU) -> pd.DataFrame:
     """One row per forecast date t.
 
     The model at t sees only prices up to and including t: it is calibrated on the last `window`
@@ -35,7 +36,8 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
     for i in range(window, len(prices) - days, step):
         known = prices.iloc[i - window:i + 1]  # window + 1 closes -> window returns, ending at t
         start = known.iloc[-1]
-        values = simulate(log_returns(known), start, shares, n_paths, days, seed + i, drift, cov, lam)
+        values = simulate(log_returns(known), start, shares, n_paths, days, seed + i, drift, cov, lam,
+                          shocks, nu)
         simulated = losses(values)
         value_now = float(start @ shares)
         realized = value_now - float(prices.iloc[i + days] @ shares)
@@ -44,6 +46,7 @@ def backtest(prices: pd.DataFrame, shares: pd.Series, levels=LEVELS, days: int =
         # days and window travel with each row so charts never have to guess the settings.
         row = {"date": prices.index[i], "end": prices.index[i + days], "days": days,
                "window": window, "cov": cov, "lam": lam if cov == "ewma" else np.nan,
+               "shocks": shocks, "nu": nu if shocks == "t" else np.nan,
                "value": value_now, "loss": realized}
         for level in levels:
             var, es = var_es(simulated, level)
@@ -206,7 +209,7 @@ def main():
         # Historical closes are the start prices here; the portfolio's price column is ignored.
         shares = load_portfolio(args.portfolio)["shares"].astype(float)
         results = backtest(prices, shares, LEVELS, args.days, args.window, args.paths,
-                           args.seed, args.drift, args.step, args.cov, args.lam)
+                           args.seed, args.drift, args.step, **model_options(args))
         table = summarize(results, LEVELS, args.days, args.step)
     except (ValueError, FileNotFoundError) as error:
         parser.exit(1, f"Error: {error}\n")
