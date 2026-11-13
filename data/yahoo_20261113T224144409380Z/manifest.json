@@ -1,0 +1,125 @@
+{
+  "source": "Yahoo Finance via yfinance",
+  "downloaded_at": "2026-11-13T22:41:44.409380+00:00",
+  "start": "2021-01-01",
+  "last_complete_session": "2026-11-05",
+  "as_of": "2026-11-05",
+  "latest_completed_session": "2026-11-13",
+  "options": {
+    "interval": "1d",
+    "auto_adjust": false,
+    "back_adjust": false,
+    "repair": false,
+    "actions": true,
+    "keepna": true
+  },
+  "calendar": "XNYS (US equity sessions)",
+  "versions": {
+    "yfinance": "1.7.0",
+    "pandas": "2.3.3",
+    "numpy": "2.5.4",
+    "exchange-calendars": "4.13.2"
+  },
+  "symbols": {
+    "ZETA": {
+      "raw_sha256": "e01ffa8bdc6daef505270cc8c624f28994f7a5e6984d32fd078375de7ea4a556",
+      "provider_rows": 1359,
+      "currency": "USD",
+      "clean_sha256": "7f79731001851789456ce072680fdb4a0334f120269ea7e4d9a3a2f384117e7d",
+      "rows": 1359,
+      "first": "2021-06-10",
+      "last": "2026-11-05"
+    },
+    "RKLB": {
+      "raw_sha256": "180eb3afc325023adc227f87e1ac73ca0f80e2acc44027fb3d933478f5818e8a",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "18d81c98d3b5dea4e9e929833d7c4c6785c6c192462daeaf424bd4d3cbaf9b33",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    },
+    "PLTR": {
+      "raw_sha256": "7bd7d66f4751678d04ed1fdb22d29d0c06b2454ba09775adbedac3eb8d9d6682",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "15caeb2bc8c50da9e6199b0110552f71db2fa58fbd3620e58f52824939ca49f4",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    },
+    "VLN": {
+      "raw_sha256": "37505e309dcb7316d64a48e9ecd5faaf4909e611839f9f50aa5f851369367fd6",
+      "provider_rows": 1281,
+      "currency": "USD",
+      "clean_sha256": "c607dc66362c6adc4fb30f58332dc0849e7e237dad78434d18908f144892d00c",
+      "rows": 1281,
+      "first": "2021-09-30",
+      "last": "2026-11-05"
+    },
+    "HIMS": {
+      "raw_sha256": "3a5f0df6ea6154eb7a259117ee8159b48f2de3fbef08fc02123f1c654dbff976",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "267bb6d87efc1860ecdc787a92953bd538d99f1575314962a6cd7024a8f84736",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    },
+    "MRVL": {
+      "raw_sha256": "a9252f3252116b0eb740be641e651082b424e81d60ab579ebdcbcd587c54a1ed",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "2ba0a1206261ed44b2a1a491981d03d962cb797b81ae93db1edd1cd1729d1747",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    },
+    "ACHR": {
+      "raw_sha256": "dac10b31abaab1b45e96920800a19bfa016bb47f0f720f7b41173030489d7446",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "b3fba11e2524fb22d04f3e367eaaa74563f0afe696cb792b2293588a2be3c885",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    },
+    "EOSE": {
+      "raw_sha256": "6563ce05dc1ad387c9655690a41136207a1d9ff57c3a90ad244d82c4f8583747",
+      "provider_rows": 1468,
+      "currency": "USD",
+      "clean_sha256": "8d1c251ebb7548e4f66c42c47cabd831701110cd1492d4809c1e8da630b2dcf5",
+      "rows": 1468,
+      "first": "2021-01-04",
+      "last": "2026-11-05"
+    }
+  },
+  "status": "READY",
+  "common": {
+    "first": "2021-09-30",
+    "last": "2026-11-05",
+    "rows": 1281
+  },
+  "files": {
+    "prices.csv": "2316ea7c370957614a59ecbc18500eabe639a0b4129c172d26fa3b9295a63955",
+    "issues.csv": "36216f988b173df40cca4d21df25257ec4c97868d4a5713f043610c2b6df7028",
+    "close_prices.csv": "7e6fec237f1910e6a5d974160684c4de6083d7fa3025acf876230a5811068a72",
+    "coverage.csv": "7e77bc184c131b3c81bf0211cf1e92cfe4c7700ac81e6f8ddb1690790a2c971a",
+    "clean/HIMS.csv": "267bb6d87efc1860ecdc787a92953bd538d99f1575314962a6cd7024a8f84736",
+    "clean/ACHR.csv": "b3fba11e2524fb22d04f3e367eaaa74563f0afe696cb792b2293588a2be3c885",
+    "clean/EOSE.csv": "8d1c251ebb7548e4f66c42c47cabd831701110cd1492d4809c1e8da630b2dcf5",
+    "clean/VLN.csv": "c607dc66362c6adc4fb30f58332dc0849e7e237dad78434d18908f144892d00c",
+    "clean/MRVL.csv": "2ba0a1206261ed44b2a1a491981d03d962cb797b81ae93db1edd1cd1729d1747",
+    "clean/ZETA.csv": "7f79731001851789456ce072680fdb4a0334f120269ea7e4d9a3a2f384117e7d",
+    "clean/PLTR.csv": "15caeb2bc8c50da9e6199b0110552f71db2fa58fbd3620e58f52824939ca49f4",
+    "clean/RKLB.csv": "18d81c98d3b5dea4e9e929833d7c4c6785c6c192462daeaf424bd4d3cbaf9b33",
+    "raw/HIMS.csv": "3a5f0df6ea6154eb7a259117ee8159b48f2de3fbef08fc02123f1c654dbff976",
+    "raw/ACHR.csv": "dac10b31abaab1b45e96920800a19bfa016bb47f0f720f7b41173030489d7446",
+    "raw/EOSE.csv": "6563ce05dc1ad387c9655690a41136207a1d9ff57c3a90ad244d82c4f8583747",
+    "raw/VLN.csv": "37505e309dcb7316d64a48e9ecd5faaf4909e611839f9f50aa5f851369367fd6",
+    "raw/MRVL.csv": "a9252f3252116b0eb740be641e651082b424e81d60ab579ebdcbcd587c54a1ed",
+    "raw/ZETA.csv": "e01ffa8bdc6daef505270cc8c624f28994f7a5e6984d32fd078375de7ea4a556",
+    "raw/PLTR.csv": "7bd7d66f4751678d04ed1fdb22d29d0c06b2454ba09775adbedac3eb8d9d6682",
+    "raw/RKLB.csv": "180eb3afc325023adc227f87e1ac73ca0f80e2acc44027fb3d933478f5818e8a"
+  }
+}
