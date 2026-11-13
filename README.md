@@ -81,15 +81,16 @@ At one day, normal shocks are rejected at 99% and t fixes it, at the cost of a l
 Same stocks, long only, weights sum to 100%, no trading inside the 21 days. Only the weights change.
 
 ```sh
-.venv\Scripts\python frontier.py      # frontier and the current portfolio's distance from it (~20 s)
-.venv\Scripts\python walkforward.py   # out-of-sample test (~30 s)
-.venv\Scripts\python charts.py        # adds reports/frontier.png
+.venv\Scripts\python frontier.py      # the trade-off, and how far the current portfolio is from it (~20 s)
+.venv\Scripts\python walkforward.py   # out-of-sample test of the weights model (~30 s)
+.venv\Scripts\python weights.py       # the weights model: today's weights for the stocks
+.venv\Scripts\python charts.py        # adds reports/frontier.png and reports/walkforward.png
 ```
 
 - Bad case: 95% expected shortfall (ES), the mean 21-day loss in the worst 5% of scenarios. Good case ("upside"): the 21-day gain that only the best 5% of scenarios beat. Both are shares of today's value.
-- `frontier.py` simulates the 21-day return of every stock once and judges every set of weights on those same scenarios, so portfolios differ by their weights and not by simulation luck. For a buy-and-hold portfolio the return is exactly the weighted sum of the stock returns. Minimum-ES weights come from the Rockafellar-Uryasev linear program, so the optimum is global. The frontier is the least ES for each expected-return target, from the safest mix up to the single highest-mean stock. The mean is the target because it is the only reward that keeps the problem linear; the upside is then measured on each frontier portfolio. 1,000 random weightings are drawn as a check: none reaches more upside than the frontier at the same ES by more than about half a point.
+- `frontier.py` simulates the 21-day return of every stock once and judges every set of weights on those same scenarios, so portfolios differ by their weights and not by simulation luck. For a buy-and-hold portfolio the return is exactly the weighted sum of the stock returns. Minimum-ES weights come from the Rockafellar-Uryasev linear program, so the optimum is global. The frontier is the least ES for each expected-return target, from the safest mix up to the single highest-mean stock. The mean is the target because it is the only reward that keeps the problem linear; the upside is then measured on each frontier portfolio. 1,000 random weightings are drawn as a check: none reaches more upside than the frontier at the same ES by more than about half a point. Only the stocks in `portfolio.csv` are reweighted.
 - Scenarios come from the GBM model (`--source gbm`, default) or from a block bootstrap of real days (`--source bootstrap`, `--block 5`), which keeps joint crashes, skew and week-long volatility clustering. `--drift zero` centers every stock's mean log return at zero in both sources; `--drift historical` keeps the sample mean. That gives a 2 x 2 comparison of drift assumption and return shape.
-- `walkforward.py`: every 21 trading days the weights are re-optimized on the last 252 returns only, held for 21 days and scored on the actual closes. Four strategies: today's weights (applied at every date), equal weight, minimum ES, and minimum ES with at least the model mean of today's weights.
+- `walkforward.py`: every 21 trading days the weights are refitted on the last 252 returns only, held for 21 days and scored on the actual closes. Four strategies: today's weights (applied at every date), equal weight, minimum ES (the weights model), and minimum ES with at least the model mean of today's weights.
 
 What the model says today (10,000 scenarios, full history; ES cut and upside kept relative to the current weights):
 
@@ -116,4 +117,28 @@ Reading it:
 - Run with a rebalance every 3 days instead (`--step 3`: 336 overlapping periods, so every start date counts), min ES cut the realized ES by 12% and kept 89% of the upside, almost exactly what the model predicts. Equal weight cut nothing there (-2%) and kept 110%: its good showing on the 48 periods depends on where the windows start.
 - With other scenario settings the 48-period ES cut of min ES ranges from 3% to 15%. Realized ES and upside rest on three periods each out of 48, so differences of a point or two are noise.
 
-Limits: the eight stocks were chosen today and today's weights reflect past winners; no trading costs or taxes, and the min-ES weights move a lot between rebalances; volatility is constant inside the horizon; different seeds move individual min-ES weights by a few points because ES is flat near the optimum.
+## The weights model
+
+`weights.py` takes any set of stocks with a price history and returns long-only weights that sum to 100%: the minimum-ES portfolio on zero-drift scenarios, fitted on the last 252 daily returns. It is the strategy that `walkforward.py` tests, called through the same function.
+
+```sh
+.venv\Scripts\python weights.py                          # every stock in the snapshot
+.venv\Scripts\python weights.py --symbols PLTR MRVL HIMS  # any subset
+```
+
+For other stocks, download them into their own folder so the default snapshot stays as it is: `market_data.py --symbols ... --output other_data`, then `weights.py --snapshot other_data\yahoo_<timestamp>`.
+
+Why the safest end of the frontier and not a point further up: moving up needs expected returns. Under zero drift those are only the compounding bonus of the most volatile stock, and historical means are too noisy to act on (with volatilities of 66% to 118% a year, five years of data leave a standard error of roughly 30 to 50 points on each yearly mean). How the stocks move together can be estimated, and the VaR backtest above checks it. The upside given up is reported, not targeted.
+
+Settings, on the 168 rebalance dates that every setting can be tested on (`--step 3`, 2024-10 onwards), against the current weights:
+
+| calibration | realized ES cut | upside kept | weights moved per rebalance |
+|---|---|---|---|
+| 252 returns (default) | 13% | 101% | 10% |
+| 504 returns | 10% | 103% | 8% |
+| 756 returns | 8% | 113% | 8% |
+| 252 returns, EWMA covariance | 14% | 107% | 32% |
+
+The default was fixed before this comparison (it is the backtest's window) and nothing here argues for changing it: longer windows cut less, and EWMA cuts the same for three times the trading. Different seeds move single weights by about a point and leave the ES unchanged to four decimals, because ES is flat around its minimum.
+
+Limits: the eight stocks were chosen today and today's weights reflect past winners; trading costs and taxes are not modeled, and the weights move about 10% of the portfolio at each monthly rebalance; volatility is constant inside the horizon; the output is a model result on five years of data, not a recommendation to trade.

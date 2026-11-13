@@ -1,4 +1,4 @@
-"""Charts: VaR backtest, simulated 21-day outcomes, return correlations, reweighting frontier."""
+"""Charts: VaR backtest, simulated outcomes, correlations, reweighting frontier and its test."""
 
 from __future__ import annotations
 
@@ -196,6 +196,38 @@ def frontier_chart(table: pd.DataFrame, path: Path) -> Path:
     return path
 
 
+def walkforward_chart(results: pd.DataFrame, path: Path) -> Path:
+    """Out of sample, one dot per holding period: today's weights against the weights model."""
+    days, now, model = int(results["days"].iat[0]), results["current"], results["min ES"]
+    low, high = min(now.min(), model.min()) - 0.03, max(now.max(), model.max()) + 0.03
+    with plt.rc_context(STYLE):
+        fig, ax = plt.subplots(figsize=(7, 7))
+        ax.axhline(0, color=INK_2, linewidth=0.8)
+        ax.axvline(0, color=INK_2, linewidth=0.8)
+        ax.plot([low, high], [low, high], color=INK_2, linewidth=1, linestyle="--", label="Same result")
+        ax.scatter(now, model, s=28, color=VAR_99, edgecolors=SURFACE, linewidths=0.8,
+                   label=f"One {days}-day holding period")
+        ax.text(0.03, 0.30, "Above the line:\nmodel lost less", transform=ax.transAxes,
+                color=INK_2, fontsize=9)
+        ax.text(0.97, 0.62, "Below the line:\nmodel gained less", transform=ax.transAxes,
+                color=INK_2, fontsize=9, ha="right")
+        ax.set_xlim(low, high)
+        ax.set_ylim(low, high)
+        ax.set_aspect("equal")
+        ax.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
+        ax.set_xlabel("Realized return with today's weights")
+        ax.set_ylabel("Realized return with the model's weights (min ES)")
+        ax.set_title("Out of sample: the weights model vs. today's weights", pad=24)
+        ax.text(0, 1.02, f"{len(results)} periods; weights fit only on data before each period",
+                transform=ax.transAxes, color=INK_2, fontsize=9, va="bottom")
+        ax.legend(loc="upper left", fontsize=9)
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     add_arguments(parser)
@@ -203,6 +235,8 @@ def main():
                         help="Per-date results written by backtest.py")
     parser.add_argument("--frontier", type=Path, default=REPORTS / "frontier.csv",
                         help="Portfolios written by frontier.py")
+    parser.add_argument("--walkforward", type=Path, default=REPORTS / "walkforward.csv",
+                        help="Per-date results written by walkforward.py")
     parser.add_argument("--out", type=Path, default=REPORTS, help="Folder for the PNG files")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -223,10 +257,15 @@ def main():
             print(f"Skipped backtest chart: {error}")
     else:
         print(f"Skipped backtest chart: {args.backtest} not found; run backtest.py first")
-    if args.frontier.exists():
-        written.append(frontier_chart(pd.read_csv(args.frontier), args.out / "frontier.png"))
-    else:
-        print(f"Skipped frontier chart: {args.frontier} not found; run frontier.py first")
+    for name, source, chart in (("frontier", args.frontier, frontier_chart),
+                                ("walkforward", args.walkforward, walkforward_chart)):
+        if not source.exists():
+            print(f"Skipped {name} chart: {source} not found; run {name}.py first")
+            continue
+        try:
+            written.append(chart(pd.read_csv(source), args.out / f"{name}.png"))
+        except KeyError as error:
+            print(f"Skipped {name} chart: {source} lacks {error}; rerun {name}.py")
     for path in written:
         print(f"Wrote {path}")
 

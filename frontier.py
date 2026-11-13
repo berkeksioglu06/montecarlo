@@ -164,6 +164,7 @@ def main():
     args = parser.parse_args()
     try:
         returns, start, shares, _ = load_inputs(args)
+        returns = returns[returns.columns.intersection(shares.index)]  # only reweight what is held
         current = current_weights(returns.columns, start, shares)
         scen = scenarios(returns, args.paths, args.days, args.seed, args.drift, args.source,
                          args.block, **model_options(args))

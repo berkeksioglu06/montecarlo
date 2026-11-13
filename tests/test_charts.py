@@ -7,10 +7,11 @@ import pandas as pd
 
 from backtest import backtest
 from charts import (backtest_chart, backtest_labels, correlation_chart, distribution_chart,
-                    frontier_chart, paths_chart)
+                    frontier_chart, paths_chart, walkforward_chart)
 from frontier import compare, frontier, random_mixes, scenarios
 from simulation import simulate
 from test_backtest import SHARES, gbm_prices
+from walkforward import walk_forward
 
 PNG = b"\x89PNG"
 
@@ -28,6 +29,15 @@ class ChartTests(unittest.TestCase):
                      correlation_chart(returns, Path(tmp) / "c.png")]
             for path in paths:
                 self.assertEqual(path.read_bytes()[:4], PNG)
+
+    def test_walkforward_chart_reads_saved_csv(self):
+        results = walk_forward(gbm_prices(n=120), pd.Series({"A": 0.1, "B": 0.9}), days=5,
+                               window=60, n=200)
+        with tempfile.TemporaryDirectory() as tmp:
+            csv = Path(tmp) / "walkforward.csv"
+            results.assign(days=5).to_csv(csv)
+            path = walkforward_chart(pd.read_csv(csv), Path(tmp) / "w.png")
+            self.assertEqual(path.read_bytes()[:4], PNG)
 
     def test_frontier_chart_reads_saved_csv(self):
         scen = scenarios(np.log(gbm_prices(n=150)).diff().iloc[1:], 500, 5)

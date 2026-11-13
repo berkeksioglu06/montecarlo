@@ -9,10 +9,11 @@ import pandas as pd
 
 from backtest import REPORTS
 from frontier import (LEVEL, against_current, check_weights, current_weights, measure,
-                      min_es_weights, scenario_arguments, scenario_label, scenarios)
+                      min_es_weights, scenario_arguments, scenario_label)
 from returns import latest_snapshot, load_prices, log_returns
 from risk import var_es
 from simulation import MIN_RETURNS, PORTFOLIO, load_portfolio, model_arguments, model_options
+from weights import model_weights
 
 STRATEGIES = ("current", "equal weight", "min ES at same mean", "min ES")
 
@@ -22,24 +23,23 @@ def walk_forward(prices: pd.DataFrame, current: pd.Series, days: int = 21, windo
                  **scenario_options) -> pd.DataFrame:
     """One row per rebalance date t: the realized `days`-day return of each strategy.
 
-    At t the optimizer sees only the last `window` daily returns ending at t. Weights are set at
+    At t the weights model sees only the last `window` daily returns ending at t. Weights are set at
     the close of t and held without trading; the outcome uses the actual closes at t and t + days,
     which are never used to fit. `current` is today's weights applied at every date, so it is a
     fixed mix and not the portfolio that was actually held back then.
-    The columns after the strategies are the "min ES" weights chosen at each date.
+    "min ES" is the weights model; the columns after the strategies are its weights at each date.
     """
     if window < MIN_RETURNS:
         raise ValueError(f"Window must be at least {MIN_RETURNS} returns")
     step = days if step is None else step
-    if step < 1:
-        raise ValueError("Step must be positive")
+    if days < 1 or step < 1:
+        raise ValueError("Days and step must be positive")
     current = check_weights(current, prices.columns)
     equal = pd.Series(1 / len(current), index=current.index)
     rows = []
     for i in range(window, len(prices) - days, step):
-        scen = scenarios(log_returns(prices.iloc[i - window:i + 1]), n, days, seed + i,
-                         **scenario_options)
-        safest = min_es_weights(scen)
+        safest, scen = model_weights(log_returns(prices.iloc[i - window:i + 1]), n, days, seed + i,
+                                     **scenario_options)
         # Same model mean as the current mix if reachable, else the safest mix already beats it.
         target = measure(scen, current)["mean"]
         matched = safest if measure(scen, safest)["mean"] >= target else min_es_weights(scen, target)
@@ -85,9 +85,10 @@ def main():
     args = parser.parse_args()
     try:
         prices = load_prices(args.snapshot or latest_snapshot(), args.start)
+        shares = load_portfolio(args.portfolio)["shares"].astype(float)
+        prices = prices[prices.columns.intersection(shares.index)]  # only reweight what is held
         # Today's weights: share counts valued at the snapshot's last close.
-        current = current_weights(prices.columns, prices.iloc[-1],
-                                  load_portfolio(args.portfolio)["shares"].astype(float))
+        current = current_weights(prices.columns, prices.iloc[-1], shares)
         results = walk_forward(prices, current, args.days, args.window, args.paths, args.seed,
                                args.step, drift=args.drift, source=args.source, block=args.block,
                                **model_options(args))
@@ -107,6 +108,8 @@ def main():
         weights = results[prices.columns]
         print(pd.DataFrame({"current": current, "mean": weights.mean(), "min": weights.min(),
                             "max": weights.max()}).to_string())
+        moved = weights.diff().abs().sum(axis=1).iloc[1:].mean() / 2
+        print(f"From one rebalance to the next they move {moved:.1%} of the portfolio on average.")
     print(f"\nSaved per-date results to {args.out}")
 
 
