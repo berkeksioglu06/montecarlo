@@ -1,0 +1,45 @@
+symbol,severity,code,message
+ZETA,WARNING,SHORT_HISTORY,Requested 2021-01-01; available from 2021-06-10
+ZETA,WARNING,LARGE_MOVE,2021-10-05: adjusted-close move exceeds 25%; review
+ZETA,WARNING,LARGE_MOVE,2024-11-13: adjusted-close move exceeds 25%; review
+ZETA,WARNING,LARGE_MOVE,2025-08-06: adjusted-close move exceeds 25%; review
+RKLB,WARNING,LARGE_MOVE,2021-03-01: adjusted-close move exceeds 25%; review
+RKLB,WARNING,LARGE_MOVE,2021-09-09: adjusted-close move exceeds 25%; review
+RKLB,WARNING,LARGE_MOVE,2024-11-13: adjusted-close move exceeds 25%; review
+RKLB,WARNING,LARGE_MOVE,2025-01-21: adjusted-close move exceeds 25%; review
+RKLB,WARNING,LARGE_MOVE,2026-05-08: adjusted-close move exceeds 25%; review
+PLTR,WARNING,LARGE_MOVE,2021-01-22: adjusted-close move exceeds 25%; review
+PLTR,WARNING,LARGE_MOVE,2024-02-06: adjusted-close move exceeds 25%; review
+PLTR,WARNING,LARGE_MOVE,2026-08-04: adjusted-close move exceeds 25%; review
+VLN,WARNING,SHORT_HISTORY,Requested 2021-01-01; available from 2021-09-30
+VLN,WARNING,LARGE_MOVE,2026-01-09: adjusted-close move exceeds 25%; review
+VLN,WARNING,LARGE_MOVE,2026-04-30: adjusted-close move exceeds 25%; review
+VLN,WARNING,LARGE_MOVE,2026-06-05: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2021-01-28: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2024-02-27: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2024-05-20: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2025-02-13: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2025-02-21: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2025-06-23: adjusted-close move exceeds 25%; review
+HIMS,WARNING,LARGE_MOVE,2026-03-09: adjusted-close move exceeds 25%; review
+MRVL,WARNING,LARGE_MOVE,2023-05-26: adjusted-close move exceeds 25%; review
+MRVL,WARNING,LARGE_MOVE,2026-06-02: adjusted-close move exceeds 25%; review
+ACHR,WARNING,LARGE_MOVE,2022-04-28: adjusted-close move exceeds 25%; review
+ACHR,WARNING,LARGE_MOVE,2023-07-31: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2022-03-17: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2022-05-17: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2022-05-18: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2022-07-19: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2022-12-30: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2023-02-17: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2023-11-07: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2023-12-13: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2023-12-15: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2024-06-25: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2024-08-21: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2024-08-29: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2025-03-05: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2025-05-07: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2026-02-26: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2026-04-09: adjusted-close move exceeds 25%; review
+EOSE,WARNING,LARGE_MOVE,2026-05-08: adjusted-close move exceeds 25%; review
